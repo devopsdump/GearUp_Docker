@@ -1,35 +1,43 @@
-# Stage 1: Build the application
-FROM node:14 AS builder
+# base
+FROM node:17.9.0 AS base
 
-# Set the working directory in the container
-WORKDIR /app
+WORKDIR /usr/src/app
 
-# Copy package.json and package-lock.json
 COPY package*.json ./
+    
+RUN npm install
 
-# Install dependencies
-RUN npm install\
-&& npm install typescript -g --production
-
-# Copy the rest of the application code
 COPY . .
 
-# Build the application
+# for lint
+
+FROM base as linter
+
+WORKDIR /usr/src/app
+
+RUN npm run lint
+
+# for build
+
+FROM linter as builder
+
+WORKDIR /usr/src/app
+
 RUN npm run build
 
-# Stage 2: Create a lightweight image to run the application
-FROM node:14-alpine
 
-# Set the working directory in the container
-WORKDIR /app
+# for production
 
-# Copy the built application from the previous stage
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/package.json ./
-COPY --from=builder /app/tsconfig.json ./
+FROM node:17.9.0-alpine3.15
 
-# Expose the port the app runs on
+WORKDIR /usr/src/app
+
+COPY package*.json ./
+
+RUN npm install --only=production
+
+COPY --from=builder /usr/src/app/dist ./
+
 EXPOSE 3000
 
-# Command to run the application
-CMD ["node", "dist/index.js"]
+ENTRYPOINT ["node","./app.js"]
